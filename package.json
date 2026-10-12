@@ -1,0 +1,46 @@
+{
+  "name": "dsh-fare-meter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Syncs the DeepSeek account balance and shows what each conversation turn actually cost.",
+  "license": "MIT",
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cost",
+    "billing",
+    "balance"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "scripts": {
+    "test": "node test/verify-pricing.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-api-account-controller",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  }
+}
