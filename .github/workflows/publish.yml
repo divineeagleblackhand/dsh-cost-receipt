@@ -21,6 +21,10 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
+      # 可信发布（OIDC）需要 npm >= 11.5.1，runner 自带的偏旧 —— 少这步就会 404
+      - name: 升级 npm
+        run: npm install -g npm@latest
+
       - name: 校验 tag 与 package.json 版本一致
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
