@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/33434067/README.md)
 # dsh-cost-receipt
 
 在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）每条回复下面加一行：**本次问答花了多少钱**，以及账户余额。

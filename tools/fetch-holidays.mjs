@@ -27,7 +27,7 @@ const isWeekend = (iso) => {
 // 由人手动触发、只取 19 个日期（事实数据）而不转载正文，User-Agent 如实标识自己。
 const res = await fetch(url, {
   headers: {
-    'user-agent': 'dsh-fare-meter/1.0 (personal cost meter; one request per year)',
+    'user-agent': 'dsh-cost-receipt/1.0 (personal cost meter; one request per year)',
     accept: 'application/json,text/html,*/*',
   },
   signal: AbortSignal.timeout(20000),

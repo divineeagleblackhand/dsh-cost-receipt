@@ -25,7 +25,7 @@
  *       cacheWriteTokens?, reasoningTokens?, routes? }`，只有该轮结束后才有。
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-fare-meter',
+  id: 'dsh-cost-receipt',
   factory(require) {
     const React = require('react');
     const h = React.createElement;
@@ -43,7 +43,7 @@ window.__ModuleLoader__.load({
       /* 拿不到就退回内联渲染：功能一样，只是可能被祖先容器裁掉 */
     }
 
-    const NS = 'fare-meter';
+    const NS = 'cost-receipt';
     /** 账号 Remote 要的客户端版本号，不能为空。 */
     const CLIENT_VERSION = '0.2.0-rc.2';
     /**
@@ -437,7 +437,7 @@ window.__ModuleLoader__.load({
           clearInterval(timer);
           polling = false;
         };
-      }, 'fare-meter: 余额轮询');
+      }, 'cost-receipt: 余额轮询');
     }
 
     // ------------------------------------------------------------------ 视图 --
@@ -893,7 +893,7 @@ window.__ModuleLoader__.load({
         if (!showBalance) return null;
         return h('div', {
           ref: anchor,
-          'data-fare-meter': String(number ?? ''),
+          'data-cost-receipt': String(number ?? ''),
           style: rowStyle(),
         }, h('span', { style: { color: WARNING } }, t('nonCny')));
       }
@@ -960,7 +960,7 @@ window.__ModuleLoader__.load({
 
       return h('div', {
         ref: anchor,
-        'data-fare-meter': String(number ?? ''),
+        'data-cost-receipt': String(number ?? ''),
         style: rowStyle(),
         onMouseEnter: enter,
         onMouseLeave: leave,
@@ -1024,11 +1024,11 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots', 'locale', 'remote', 'remote.account'],
       apply(ctx) {
-        ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'fare-meter: 词典');
+        ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'cost-receipt: 词典');
         startPolling(ctx);
         ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
           name: 'conversation.chat.turnTail',
-          id: 'fare-meter',
+          id: 'cost-receipt',
           order: 50,
           locale: NS,
         }, CostBadge));
