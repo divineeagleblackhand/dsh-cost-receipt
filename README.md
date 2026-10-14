@@ -34,12 +34,15 @@ dsh plugin --profile desktop add https://github.com/divineeagleblackhand/dsh-cos
 
 > 若直连 GitHub 困难，用 npm 那条命令；或先把仓库克隆到本地，再用绝对路径安装。
 
-## 隐私
+## 隐私与联网
 
-- **零网络请求**：插件自己不发起任何外部请求。余额通过 dsh 宿主的 `account/getBalance` 取得，是进程内调用。
+- **插件自身不直接联网**：`client.js` / `index.js` 里没有任何 `fetch`、`XMLHttpRequest`、WebSocket 调用，可以逐行核对。
+- **余额经由宿主查询**：插件通过 dsh 宿主的 `account/getBalance` 取余额（和你打开账号设置看到的是同一条路径），因此**每 30 秒会触发一次账号查询，页面不可见时降为每 3 分钟一次**。这是它唯一与外部有关的动作，走的是 dsh 自带的账号功能，账号令牌始终只在宿主手里。
 - **零存储**：不写任何文件，不用 localStorage。
 - **零凭据访问**：不读 API Key，不读任何配置文件。
-- 唯一读取的数据是当前会话的 token 用量，也就是 dsh 自己「本轮用量」面板用的那一份。
+- 唯一读取的本地数据是当前会话的 token 用量，也就是 dsh 自己「本轮用量」面板用的那一份。
+
+> 仓库里的 `tools/fetch-holidays.mjs` 是**维护脚本**，用来刷新内置的节假日表：它需要联网（默认查第三方节假日 API，也可传入国务院通知原文的 URL 做交叉校验），由维护者**一年手动跑一次**，而且**不会随 npm 包发布给用户**（打包白名单 `files` 里只有插件运行必需的那几个文件）。
 
 ## 计价口径与边界
 
@@ -81,4 +84,4 @@ MIT
 
 ---
 
-**English** — A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plugin that adds one line under every reply showing what that exchange cost, priced from the turn's own token usage at the official peak/off-peak CNY rates, together with the account and bonus balances. Hover for a cost breakdown of the exchange versus the whole conversation. When a price cannot be computed it says why instead of guessing. No network requests, no storage, no credentials. Requires dsh 0.2.0-rc.2; CNY accounts only.
+**English** — A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plugin that adds one line under every reply showing what that exchange cost, priced from the turn's own token usage at the official peak/off-peak CNY rates, together with the account and bonus balances. Hover for a cost breakdown of the exchange versus the whole conversation. When a price cannot be computed it says why instead of guessing. The plugin makes no network calls of its own — the balance is read through the dsh host, which is also how dsh's own account page reads it; it stores nothing and never touches credentials. Requires dsh 0.2.0-rc.2; CNY accounts only.
