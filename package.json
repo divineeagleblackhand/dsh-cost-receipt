@@ -1,10 +1,17 @@
 {
   "name": "dsh-cost-receipt",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "description": "Syncs the DeepSeek account balance and shows what each conversation turn actually cost.",
+  "description": "DeepSeek Harness plugin: one line under every reply showing what that exchange cost, plus the account and bonus balances. Peak/off-peak CNY pricing from real token usage. No network, no storage.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/divineeagleblackhand/dsh-cost-receipt.git"
+  },
+  "homepage": "https://github.com/divineeagleblackhand/dsh-cost-receipt#readme",
+  "bugs": {
+    "url": "https://github.com/divineeagleblackhand/dsh-cost-receipt/issues"
+  },
   "keywords": [
     "deepseek",
     "deepseek-harness",
@@ -12,7 +19,9 @@
     "dsh-plugin",
     "cost",
     "billing",
-    "balance"
+    "balance",
+    "receipt",
+    "cny"
   ],
   "exports": {
     ".": "./index.js",
@@ -27,7 +36,8 @@
     "locale/*.json"
   ],
   "scripts": {
-    "test": "node test/verify-pricing.mjs"
+    "test": "node test/verify-pricing.mjs",
+    "prepublishOnly": "node test/verify-pricing.mjs"
   },
   "dsh": {
     "bundle": {

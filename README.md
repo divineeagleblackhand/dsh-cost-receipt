@@ -1,6 +1,6 @@
 # dsh-cost-receipt
 
-在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）每条回复下面加一行：**本次问答花了多少钱**，以及账户余额。，鼠标悬停时显示饼图按花费费用占比
+在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）每条回复下面加一行：**本次问答花了多少钱**，以及账户余额。鼠标悬停可看费用构成的饼图，按花费占比画。
 
 ```
 本次问答花费 ¥0.165824    账户余额 ¥6.2164    礼金余额 ¥1.5366
@@ -16,21 +16,23 @@
 
 ## 安装
 
-在 dsh 插件页的「添加插件」里填仓库地址：
+从 npm 装（推荐：名字短，还能锁版本）：
 
 ```
-https://github.com/divineeagleblackhand/dsh-cost-receipt
+dsh plugin --profile desktop add dsh-cost-receipt
 ```
 
-或者命令行（桌面版的 profile 名是 `desktop`）：
+或直接从 GitHub 仓库装：
 
 ```
 dsh plugin --profile desktop add https://github.com/divineeagleblackhand/dsh-cost-receipt
 ```
 
+也可以在 dsh 插件页的「添加插件」里粘上面任意一条地址（桌面版的 profile 名就是 `desktop`）。
+
 装完刷新页面。若角标没出现，完全退出并重启桌面版。
 
-> 若直连 GitHub 困难：先把仓库克隆到本地，再用绝对路径安装即可，效果一样。
+> 若直连 GitHub 困难，用 npm 那条命令；或先把仓库克隆到本地，再用绝对路径安装。
 
 ## 隐私
 
