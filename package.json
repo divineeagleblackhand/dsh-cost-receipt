@@ -1,6 +1,6 @@
 {
   "name": "dsh-cost-receipt",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "DeepSeek Harness plugin: one line under every reply showing what that exchange cost, plus the account and bonus balances. Peak/off-peak CNY pricing from real token usage. No network calls of its own, no storage.",
   "license": "MIT",
