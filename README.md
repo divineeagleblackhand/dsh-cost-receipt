@@ -1,6 +1,6 @@
 # dsh-cost-receipt
 
-在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）每条回复下面加一行：**本次问答花了多少钱**，以及账户余额。
+在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）每条回复下面加一行：**本次问答花了多少钱**，以及账户余额。，鼠标悬停时显示饼图按花费费用占比
 
 ```
 本次问答花费 ¥0.165824    账户余额 ¥6.2164    礼金余额 ¥1.5366
