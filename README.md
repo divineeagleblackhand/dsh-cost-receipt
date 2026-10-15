@@ -1,5 +1,5 @@
 # dsh-cost-receipt
-
+[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/divineeagleblackhand/dsh-cost-receipt)
 在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）每条回复下面加一行：**本次问答花了多少钱**，以及账户余额。鼠标悬停可看费用构成的饼图，按花费占比画。
 
 ```
