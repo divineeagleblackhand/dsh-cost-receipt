@@ -316,9 +316,10 @@ if (panelSrc.some((piece) => piece === null || piece === void 0)) {
   globalThis.window = { matchMedia: () => ({ matches: false }), innerWidth: 1400 };
   globalThis.requestAnimationFrame = (fn) => fn();
 
-  const CostDetailFn = new Function(
+  // 连 money() 一起导出：金额断言必须走真实实现，不能假设它落在哪个精度档。
+  const { CostDetail: CostDetailFn, money: moneyFn } = new Function(
     'React', 'h',
-    `${panelSrc.join('\n')}\nreturn CostDetail;`,
+    `${panelSrc.join('\n')}\nreturn { CostDetail, money };`,
   )(ReactStub, ReactStub.createElement);
 
   // t 直接返回键名，断言就落在键上，不受翻译文案影响。
@@ -367,9 +368,10 @@ if (panelSrc.some((piece) => piece === null || piece === void 0)) {
       ['右列是「整场对话」', rightHas('scopeSession') && !rightHas('scopeTurn')],
       ['左列合计标注「本次问答合计」', leftHas('detailTotal') && !leftHas('sessionTotal')],
       ['右列合计标注「整场累计」', rightHas('sessionTotal') && !rightHas('detailTotal')],
-      ['左列金额是本次问答金额', left.some((s) => s.includes(turnDetail.totalCost.toFixed(5)))],
-      // money() 在金额小于 ¥1 时输出 5 位小数，左右两列按同一精度比较。
-      ['右列金额是整场总额', right.some((s) => s.includes(sessionAgg.totalCost.toFixed(5)))],
+      // 期望值用真实的 money() 算：它按金额分档（≥¥1 四位 / ≥¥0.01 五位 / 更小六位）。
+      // 写死 toFixed(5) 只在样本恰好落中档时"碰巧通过"，样本一跨界就假红，也没在验证 money()。
+      ['左列金额是本次问答金额', left.some((s) => s.includes(moneyFn(turnDetail.totalCost)))],
+      ['右列金额是整场总额', right.some((s) => s.includes(moneyFn(sessionAgg.totalCost)))],
       // 两列应当对称：各自都列出 token 总量与金额。
       ['左列合计带 token 总量', left.some((s) => s.includes('tok · ¥')
         && s.includes(turnDetail.totalTokens.toLocaleString('zh-CN')))],
@@ -438,6 +440,39 @@ console.log('\n=== 币种判定：非人民币账户一律不出金额 ===');
       console.log(`  ${name.padEnd(20)} ${got ? '人民币' : '非人民币'}  期望${want ? '人民币' : '非人民币'}  ${pass ? '✓' : '✗'}`);
     }
     console.log(`  ${okCur}/${cases.length} 通过`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// money() 按金额分档保留小数：≥¥1 四位 / ≥¥0.01 五位 / 更小六位。
+// 分档点必须钉死 —— 之前没有任何测试守着它，改坏了也不会变红。
+console.log('\n=== 金额格式化 money()：分档与边界 ===');
+{
+  const moneySrc = sliceFunction(code, 'money');
+  if (moneySrc === null) {
+    console.log('  ⚠ 抽不到 money，跳过');
+  } else {
+    const moneyOnly = new Function(`${moneySrc}\nreturn money;`)();
+    const cases = [
+      [0, '0.000000', 6, '零'],
+      [0.0001234, '0.000123', 6, '小于一分'],
+      [0.009999, '0.009999', 6, '差一点到分档点'],
+      [0.01, '0.01000', 5, '分档点：一分'],
+      [0.165824, '0.16582', 5, '典型一轮花费'],
+      [0.999999, '1.00000', 5, '分档点下方：进位成 1 但仍按五位'],
+      [1, '1.0000', 4, '分档点：一元'],
+      [1.00001, '1.0000', 4, '刚过一元（四位之后不足一位）'],
+      [1234.5678, '1234.5678', 4, '大额'],
+    ];
+    let okMoney = 0;
+    for (const [value, want, wantDecimals, note] of cases) {
+      const got = moneyOnly(value);
+      const decimals = got.includes('.') ? got.length - got.indexOf('.') - 1 : 0;
+      const pass = got === want && decimals === wantDecimals;
+      if (pass) okMoney += 1;
+      console.log(`  ${String(value).padStart(10)} -> ¥${got.padEnd(10)} ${decimals} 位  期望 ¥${want} ${wantDecimals} 位  ${note}  ${pass ? '✓' : '✗'}`);
+    }
+    console.log(`  ${okMoney}/${cases.length} 通过`);
   }
 }
 

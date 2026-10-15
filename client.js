@@ -308,11 +308,20 @@ window.__ModuleLoader__.load({
        */
       currencyUnsupported: false,
       /**
-       * 这个余额数字是什么时候读到的（毫秒）。**必须显示**：宿主会缓存账号查询，
-       * 充值或大额扣费之后读数可能长时间不动，不标时间就无法判断它是"此刻"还是"几分钟前"。
+       * 余额**数值上次变化**的时刻（毫秒），**不是**"上次查询的时刻"。
+       *
+       * 两者必须分开，别混成一个：每次查询都刷新的话，它会变成一个每秒跳动的时钟，
+       * 看起来"数据很新"，恰恰掩盖了要暴露的陈旧。所以角标上那个时刻的含义是
+       * "自此刻起这个数字没再变过"，文案也按这个意思写（`余额更新于`），而不是"读取于"。
        * 实测踩过：充完钱角标还显示充值前的负数，会被误认为插件坏了。
        */
       readAt: null,
+      /**
+       * 上一次**成功查到余额**的时刻（毫秒）。只出现在悬停提示里，和 readAt 并排给出：
+       * 两个时刻一对就能区分"读数陈旧"（查询一直在走、数字不动）和"余额真的没动"。
+       * 查询失败时不更新 —— 那时 problem 会变成 network，角标改显示"不可用"。
+       */
+      queriedAt: null,
       /**
        * 每个会话各自的「最大已见轮次编号」，键是那一轮的数据仓库（每个会话一个）。
        *
@@ -396,10 +405,11 @@ window.__ModuleLoader__.load({
           // 「账户余额」只报充值余额，礼金另起一项，相加才是钱包总额。
           const balance = sumWallets(result.value.value);
           const bonus = sumWallets(result.value.bonusWallets);
-          // readAt 只在**数字真的变了**时刷新。这是刻意的：
-          // 每次轮询都刷新的话，它会变成一个每秒跳动的时钟，看起来"数据很新"，
-          // 恰恰掩盖了要暴露的陈旧；只在变化时更新，它就变成一条诚实的信息 ——
-          // 时刻不动 = 数字没变 = 读数可能被宿主缓存住了。
+          // 两个时刻含义不同，别混（见 state 里的注释）：
+          //   queriedAt —— 每次成功查到都刷新，只说"宿主刚刚答了"
+          //   readAt    —— 只在**数字真的变了**时刷新，说"这个数自此没变过"
+          // 角标显示 readAt（诚实，但可能陈旧）；悬停提示里两个都给。
+          state.queriedAt = Date.now();
           if (balance !== state.balance || bonus !== state.bonus) state.readAt = Date.now();
           state.balance = balance;
           state.bonus = bonus;
@@ -938,10 +948,13 @@ window.__ModuleLoader__.load({
         // 而 `getBalance` 不返回任何版本或时间信息，客户端无法区分
         // "陈旧"与"钱真的没动"。所以只如实报时刻，把判断留给看的人。
         const readAt = clock(state.readAt);
+        // 悬停时两个时刻都给：readAt 说"数字自此刻没变"，queriedAt 说"宿主最后一次答话"。
+        // 只有 readAt 的话，无法区分"读数被宿主缓存住了"和"账户闲着、余额本来就没动"。
+        const queried = clock(state.queriedAt) || readAt;
         children.push(h('span', {
           title: readAt === '' ? void 0
-            : (lit(t, 'readAt', { time: readAt })
-              ?? `Account balance last read at ${readAt}. Platform sync delays may make this amount non-current`),
+            : (lit(t, 'readAt', { time: readAt, queried })
+              ?? `Balance last updated at ${readAt} and unchanged since; last queried at ${queried}. Platform sync delays may make this amount non-current`),
           style: {
             opacity: 0.75,
             cursor: readAt === '' ? void 0 : 'help',
@@ -974,7 +987,7 @@ window.__ModuleLoader__.load({
     const zh = {
       spent: '本次问答花费 ¥{amount}',
       spentModel: '本次问答花费 ¥{amount} · {model}',
-      readAt: '账户余额读取于 {time}。受平台同步延迟影响，该金额可能非实时值',
+      readAt: '余额更新于 {time}，此后未变；最后一次查询 {queried}。受平台同步延迟影响，该金额可能非实时值',
       balance: '账户余额 ¥{amount}',
       bonus: '礼金余额 ¥{amount}',
       loading: '账户余额读取中…',
@@ -999,7 +1012,7 @@ window.__ModuleLoader__.load({
     const en = {
       spent: 'This exchange ¥{amount}',
       spentModel: 'This exchange ¥{amount} · {model}',
-      readAt: 'Account balance last read at {time}. Platform sync delays may make this amount non-current',
+      readAt: 'Balance last updated at {time} and unchanged since; last queried at {queried}. Platform sync delays may make this amount non-current',
       balance: 'Account balance ¥{amount}',
       bonus: 'Bonus balance ¥{amount}',
       loading: 'reading balance…',
