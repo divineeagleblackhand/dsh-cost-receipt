@@ -5,6 +5,7 @@
 ```
 本次问答花费 ¥0.165824    账户余额 ¥6.2164    礼金余额 ¥1.5366
 ```
+<img width="513" height="400" alt="image" src="https://github.com/user-attachments/assets/ae9d9fe0-6e15-4c1c-8d6f-60e60b52e87c" />
 
 ## 特点
 
