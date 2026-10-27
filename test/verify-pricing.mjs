@@ -387,6 +387,11 @@ if (panelSrc.some((piece) => piece === null || piece === void 0)) {
       ['推理注释不在任何一列里',
         !leftHas('detailReasoning') && !rightHas('detailReasoning')
         && textsOf(panel).includes('detailReasoning')],
+      // 搜索的服务端检索 token 与按次费都不在宿主上报的用量里，面板必须把范围写出来，
+      // 否则用户会把「本次问答花费」当成全部成本。
+      ['面板列了搜索费用的排除范围',
+        !leftHas('searchNote') && !rightHas('searchNote')
+        && textsOf(panel).includes('searchNote')],
       // 合计行必须是竖排且禁止换行：标签和金额挤在一行时列宽不够会换行，
       // 数字被推到下一行，看起来就像属于旁边那一列。
       ['两个合计行都是竖排且不换行', (() => {

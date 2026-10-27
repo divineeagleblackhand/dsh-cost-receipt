@@ -814,7 +814,18 @@ window.__ModuleLoader__.load({
           fontSize: 11,
           lineHeight: '15px',
         },
-      }, t('detailReasoning', { tokens: count(detail.reasoning) })) : null));
+      }, t('detailReasoning', { tokens: count(detail.reasoning) })) : null,
+      // 面板只覆盖宿主会上报的 token 用量。搜索在服务端另起一次模型请求，那部分
+      // token 不进本会话；搜索/抓取 API 又按次计费 —— 两者都不在这里面。
+      // 所以这个金额永远是**偏低**的下界，把范围写出来，别让人当成全部成本。
+      h('div', {
+        style: {
+          marginTop: 8,
+          color: 'var(--dsw-alias-label-caption, #a0a0a0)',
+          fontSize: 11,
+          lineHeight: '15px',
+        },
+      }, t('searchNote'))));
     }
 
     function CostBadge(props) {
@@ -1000,6 +1011,7 @@ window.__ModuleLoader__.load({
       detailTotal: '本次问答合计',
       detailScope: '费用构成 · 按计费金额占比（非 token 数量）',
       detailReasoning: '输出中含推理 {tokens} tok',
+      searchNote: '不含 web_search 服务端检索的 token（那是另一次模型请求），以及搜索/抓取 API 的按次费（各 ¥0.005/次，2026-11-01 起）。web_fetch 抓回的正文已计入。',
       sessionTotal: '整场累计',
       scopeTurn: '本次问答',
       scopeSession: '整场对话',
@@ -1025,6 +1037,7 @@ window.__ModuleLoader__.load({
       detailTotal: 'Exchange total',
       detailScope: 'Cost breakdown · share of billed amount, not tokens',
       detailReasoning: 'output includes {tokens} tok reasoning',
+      searchNote: 'Excludes the tokens web_search spends server-side (a separate model request) and the per-request Search/Fetch API fee (¥0.005 each, from 2026-11-01). Text returned by web_fetch is included.',
       sessionTotal: 'Conversation total',
       scopeTurn: 'This exchange',
       scopeSession: 'Whole conversation',

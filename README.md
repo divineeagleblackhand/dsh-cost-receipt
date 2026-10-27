@@ -1,11 +1,10 @@
 # dsh-cost-receipt
-[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/divineeagleblackhand/dsh-cost-receipt)
+
 在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）每条回复下面加一行：**本次问答花了多少钱**，以及账户余额。鼠标悬停可看费用构成的饼图，按花费占比画。
 
 ```
 本次问答花费 ¥0.165824    账户余额 ¥6.2164    礼金余额 ¥1.5366
 ```
-<img width="513" height="400" alt="image" src="https://github.com/user-attachments/assets/ae9d9fe0-6e15-4c1c-8d6f-60e60b52e87c" />
 
 ## 特点
 
@@ -55,16 +54,18 @@ dsh plugin --profile desktop add https://github.com/divineeagleblackhand/dsh-cos
 | 时段 | 高峰＝北京时间周一至周五 9:00–12:00、14:00–18:00，**不含法定节假日**，其余时间空闲价。判定与你的系统时区无关 |
 | 节假日 | 内置国务院 2026 年安排（19 天）。未收录的年份退回"不修正"，不会给错答案，只是不再修正 |
 | 币种 | **只支持人民币账户**。检测到非人民币钱包时一个金额都不显示，只提示「仅支持人民币账户」 |
+| 搜索与抓取 | **不在上表口径内**。`web_search` 的检索在服务端完成（另起一次模型请求），那部分 token 不进本会话用量；搜索/抓取 API 还按次收费（各 ¥0.005/次，2026-11-01 起）。`web_fetch` 抓回的正文**已**计入 |
 
 已知误差：
 
 - **跨峰谷边界的轮次**按该轮结束时刻整轮定价，最坏偏 50%（一轮 5 分钟跨界的概率约 1.4%）。
 - **整场累计**只覆盖已加载进视图的轮次；超长会话分页时这个数会偏低。
 - **单价表与节假日表会随官方更新**，需要手动改常量（见下）。
+- **含搜索的轮次会偏低**：`web_search` 的服务端检索消耗的是另一次模型请求的 token，宿主不上报，插件看不到；搜索/抓取的按次费同理。所以面板上的金额是**下界**——只会少算，不会多算。`web_fetch` 抓回的正文正常计入。
 
 ## 兼容性
 
-- 需要 **dsh 0.2.0-rc.2**：插件依赖它内部的 turn-tail 数据与 account Remote。dsh 升级后如果角标消失，第一个要怀疑的就是这里。
+- 需要 **dsh 0.2.0-rc.2 及以上**：插件依赖它内部的 turn-tail 数据与 account Remote。这两个接口已在 **0.2.1-rc.2** 上核对仍然存在；dsh 升级后如果角标消失，第一个要怀疑的就是这里。
 - Web 版与桌面版均可，Windows 与 macOS 均可（纯客户端插件，不碰文件系统，也没有平台分支）。
 - 非人民币账户不显示金额（见上）。
 
@@ -74,7 +75,7 @@ dsh plugin --profile desktop add https://github.com/divineeagleblackhand/dsh-cos
 npm test
 ```
 
-测试脚本会**从 `client.js` 里切片抽出真实的计价代码来执行**，而不是复制一份——避免"测的和跑的不是同一份"。覆盖：峰谷时段边界、节假日、三项拆解对账、饼图与角标同源、会话累计、悬停面板结构、币种判定、中英字典对齐。
+测试脚本会**从 `client.js` 里切片抽出真实的计价代码来执行**，而不是复制一份——避免"测的和跑的不是同一份"。覆盖：峰谷时段边界、节假日、三项拆解对账、饼图与角标同源、会话累计、悬停面板结构、金额格式化分档、币种判定、搜索费用声明的排除范围、中英字典对齐。
 
 - 改价格表：`client.js` 顶部的 `PRICES`
 - 刷新节假日表：`node tools/fetch-holidays.mjs <年份>`（可再传国务院通知原文 URL 做交叉校验）
@@ -85,4 +86,4 @@ MIT
 
 ---
 
-**English** — A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plugin that adds one line under every reply showing what that exchange cost, priced from the turn's own token usage at the official peak/off-peak CNY rates, together with the account and bonus balances. Hover for a cost breakdown of the exchange versus the whole conversation. When a price cannot be computed it says why instead of guessing. The plugin makes no network calls of its own — the balance is read through the dsh host, which is also how dsh's own account page reads it; it stores nothing and never touches credentials. Requires dsh 0.2.0-rc.2; CNY accounts only.
+**English** — A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plugin that adds one line under every reply showing what that exchange cost, priced from the turn's own token usage at the official peak/off-peak CNY rates, together with the account and bonus balances. Hover for a cost breakdown of the exchange versus the whole conversation. When a price cannot be computed it says why instead of guessing. The plugin makes no network calls of its own — the balance is read through the dsh host, which is also how dsh's own account page reads it; it stores nothing and never touches credentials. Requires dsh 0.2.0-rc.2 or newer (its turn-tail and account interfaces were checked on 0.2.1-rc.2); CNY accounts only.
