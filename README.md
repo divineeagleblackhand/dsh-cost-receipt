@@ -1,89 +1,90 @@
 # dsh-cost-receipt
 
-在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）每条回复下面加一行：**本次问答花了多少钱**，以及账户余额。鼠标悬停可看费用构成的饼图，按花费占比画。
+[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/divineeagleblackhand/dsh-cost-receipt)
+
+English | [中文](README.zh.md)
+
+A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plugin that adds one line under every reply telling you what that exchange cost, plus the account balance. Hover for a pie chart of the cost breakdown, drawn by cost share.
 
 ```
-本次问答花费 ¥0.165824    账户余额 ¥6.2164    礼金余额 ¥1.5366
+This exchange ¥0.165824    Account balance ¥6.2164    Bonus balance ¥1.5366
 ```
 
-## 特点
+## What it does
 
-- **按"一问一答"计价**：每条回复下面一行，看的是刚才这一问花了多少。历史轮次也有数字，按它当时的时段定价，打开旧会话照样算得出来。
-- **余额拆成两个数**：`账户余额`只算充值余额，`礼金余额`另起一项，相加才是钱包总额。没有礼金时第二项不显示。余额只出现在每条对话的最新一轮（历史轮次显示当时的钱没有意义）。
-- **悬停看费用构成**：本次问答与整场对话**并排两个环，按花费占比画**，不是 token 占比。因为缓存命中的 token 通常占 99%，却只占不到四成花费；按 token 画会退化成一个看不见的细弧。
-- **算不出价就写明原因**，绝不静默出错：角标会直接写 `未收录模型 xxx`、`混用多模型（a + b）`、`用量未标注模型`。拿别的模型的单价硬套会错好几倍，而且看不出来。
-- **角标上的时刻表示"未变"，不是"刚读过"**：宿主会缓存账号查询，所以那个 `HH:MM:SS` 是**余额上次变化的时刻** —— 时刻不动＝数字没再变过。鼠标悬停还能看到**最后一次查询时刻**，两个一对比就知道是读数陈旧、还是余额真的没动。
+- **Priced per exchange**: one line under every reply, showing what the exchange you just had cost. Historical turns carry their own numbers too, priced at the rate of their own time window, so opening an old session still computes.
+- **The balance is two numbers**: `account balance` counts top-up funds only, `bonus balance` gets its own line, and only their sum is the wallet total. The second line disappears when there is no bonus. Balances appear only on the newest turn of a conversation, because showing historical balances would be meaningless.
+- **Hover for the breakdown**: the current exchange and the whole conversation are drawn as **two rings side by side, by cost share, not by token share**. Cached tokens are usually ~99% of the token count but under 40% of the cost; a token-based chart collapses into an invisible sliver.
+- **When a price cannot be computed it says why**, never silently: the badge reads `unpriced model xxx`, `mixed models (a + b)`, `usage without a model`. Applying another model's unit price would be off by several times and invisible.
+- **The timestamp on the badge means "unchanged", not "just read"**: the host caches account queries, so that `HH:MM:SS` is **when the balance last changed** — a still timestamp means the number has not moved. Hovering also shows the last query time, so comparing the two tells you whether the reading is stale or the balance genuinely did not change.
 
-## 安装
+## Install
 
-从 npm 装（推荐：名字短，还能锁版本）：
+From npm (recommended: shorter name, and you can pin a version):
 
 ```
 dsh plugin --profile desktop add dsh-cost-receipt
 ```
 
-或直接从 GitHub 仓库装：
+Or straight from the GitHub repository:
 
 ```
 dsh plugin --profile desktop add https://github.com/divineeagleblackhand/dsh-cost-receipt
 ```
 
-也可以在 dsh 插件页的「添加插件」里粘上面任意一条地址（桌面版的 profile 名就是 `desktop`）。
+You can also paste either address into "Add plugin" on the dsh plugin page (on desktop the profile is named `desktop`).
 
-装完刷新页面。若角标没出现，完全退出并重启桌面版。
+Refresh the page after installing. If the badge does not appear, fully quit and restart the desktop app.
 
-> 若直连 GitHub 困难，用 npm 那条命令；或先把仓库克隆到本地，再用绝对路径安装。
+> If GitHub is hard to reach, use the npm command, or clone the repository and install from its absolute path.
 
-## 隐私与联网
+## Privacy and network
 
-- **插件自身不直接联网**：`client.js` / `index.js` 里没有任何 `fetch`、`XMLHttpRequest`、WebSocket 调用，可以逐行核对。
-- **余额经由宿主查询**：插件通过 dsh 宿主的 `account/getBalance` 取余额（和你打开账号设置看到的是同一条路径），因此**每 30 秒会触发一次账号查询，页面不可见时降为每 3 分钟一次**。这是它唯一与外部有关的动作，走的是 dsh 自带的账号功能，账号令牌始终只在宿主手里。
-- **零存储**：不写任何文件，不用 localStorage。
-- **零凭据访问**：不读 API Key，不读任何配置文件。
-- 唯一读取的本地数据是当前会话的 token 用量，也就是 dsh 自己「本轮用量」面板用的那一份。
+- **The plugin makes no network calls of its own**: `client.js` / `index.js` contain no `fetch`, `XMLHttpRequest` or WebSocket calls — you can check line by line.
+- **The balance is read through the host**: the plugin asks the dsh host for `account/getBalance` (the same path as your account settings page), which means **one account query every 30 seconds, dropping to every 3 minutes while the page is hidden**. That is its only outward-facing action, and it goes through dsh's own account feature; the account token never leaves the host.
+- **No storage**: it writes no files and uses no localStorage.
+- **No credential access**: it does not read your API key or any configuration file.
+- The only local data it reads is the current session's token usage — the same data behind dsh's own "turn usage" panel.
 
-> 仓库里的 `tools/fetch-holidays.mjs` 是**维护脚本**，用来刷新内置的节假日表：它需要联网（默认查第三方节假日 API，也可传入国务院通知原文的 URL 做交叉校验），由维护者**一年手动跑一次**，而且**不会随 npm 包发布给用户**（打包白名单 `files` 里只有插件运行必需的那几个文件）。
+> `tools/fetch-holidays.mjs` in the repository is a **maintenance script** that refreshes the built-in holiday table. It needs the network (a third-party holiday API by default, or the URL of the State Council notice for cross-checking), is run manually **once a year** by the maintainer, and **is not shipped in the npm package** (the `files` whitelist only carries what the plugin needs at runtime).
 
-## 计价口径与边界
+## Pricing scope and limits
 
-| 项 | 口径 |
+| Item | Basis |
 |---|---|
-| 一轮 | 一次问答：一条用户消息 → 最终回复 |
-| 计价 | 缓存命中输入 / 未缓存输入 / 缓存写入 / 输出 四桶分别乘单价。缓存写入按未命中输入计价（官方没有单独的缓存写入价） |
-| 单价 | 人民币 / 百万 token，按模型分开，取自官方价目表 |
-| 时段 | 高峰＝北京时间周一至周五 9:00–12:00、14:00–18:00，**不含法定节假日**，其余时间空闲价。判定与你的系统时区无关 |
-| 节假日 | 内置国务院 2026 年安排（19 天）。未收录的年份退回"不修正"，不会给错答案，只是不再修正 |
-| 币种 | **只支持人民币账户**。检测到非人民币钱包时一个金额都不显示，只提示「仅支持人民币账户」 |
-| 搜索与抓取 | **不在上表口径内**。`web_search` 的检索在服务端完成（另起一次模型请求），那部分 token 不进本会话用量；搜索/抓取 API 还按次收费（各 ¥0.005/次，2026-11-01 起）。`web_fetch` 抓回的正文**已**计入 |
+| One exchange | one user message → the final reply |
+| Calculation | cached input / uncached input / cache write / output are priced separately. Cache write is billed as uncached input (there is no separate cache-write price) |
+| Unit prices | per million tokens, **per currency and per model**: CNY and USD each have their own official list, priced independently — nothing is converted |
+| Time window | peak = Beijing time Monday–Friday 09:00–12:00 and 14:00–18:00, **excluding statutory holidays**; everything else is off-peak. Evaluation is independent of your system time zone |
+| Holidays | the State Council's 2026 schedule is built in (19 days). Years outside the table fall back to "no correction" — it does not give a wrong answer, it just stops correcting |
+| Currency | **CNY and USD accounts.** The wallet's currency picks the price list and amounts are shown in that currency; a mixed or any other currency shows no amounts at all, just a notice that only CNY and USD are supported |
+| Search and fetch | **outside the table above.** `web_search` retrieves on the server side (a separate model request), and those tokens never reach this session's usage; the Search/Fetch APIs also bill per request (¥0.005 / $0.00075 each from 2026-11-01). Text returned by `web_fetch` **is** included |
 
-已知误差：
+Known margins:
 
-- **跨峰谷边界的轮次**按该轮结束时刻整轮定价，最坏偏 50%（一轮 5 分钟跨界的概率约 1.4%）。
-- **整场累计**只覆盖已加载进视图的轮次；超长会话分页时这个数会偏低。
-- **单价表与节假日表会随官方更新**，需要手动改常量（见下）。
-- **含搜索的轮次会偏低**：`web_search` 的服务端检索消耗的是另一次模型请求的 token，宿主不上报，插件看不到；搜索/抓取的按次费同理。所以面板上的金额是**下界**——只会少算，不会多算。`web_fetch` 抓回的正文正常计入。
+- **Turns that cross a peak/off-peak boundary** are priced entirely by their end time, worst case about 50% off (a 5-minute turn straddling a boundary is roughly a 1.4% case).
+- **The conversation total** only covers turns already loaded into the view; on a paginated very long session it reads low.
+- **The price table and holiday table follow the official ones**, which change — they are constants you edit by hand (see below).
+- **Turns that used search read low**: the server-side retrieval of `web_search` consumes tokens in another model request, which the host does not report and the plugin cannot see; the per-request Search/Fetch fee is likewise out of reach. The amount on the panel is therefore a **lower bound** — it under-reports, never over-reports. Text returned by `web_fetch` is counted normally.
+- **Historical turns use the current currency**: if an account changed currency mid-session (very rare), older turns are priced with the present table, which is not what was actually charged.
 
-## 兼容性
+## Compatibility
 
-- 需要 **dsh 0.2.0-rc.2 及以上**：插件依赖它内部的 turn-tail 数据与 account Remote。这两个接口已在 **0.2.1-rc.2** 上核对仍然存在；dsh 升级后如果角标消失，第一个要怀疑的就是这里。
-- Web 版与桌面版均可，Windows 与 macOS 均可（纯客户端插件，不碰文件系统，也没有平台分支）。
-- 非人民币账户不显示金额（见上）。
+- Requires **dsh 0.2.0-rc.2 or newer**: the plugin depends on the host's turn-tail data and account Remote. Those two interfaces were checked on **0.2.1-rc.2 and 0.2.1-rc.3**; if the badge disappears after a dsh upgrade, this is the first thing to suspect.
+- Web and desktop, Windows and macOS (a pure client plugin: it touches no filesystem and has no platform branches).
+- Non-CNY accounts show no amounts (see above).
 
-## 开发
+## Development
 
 ```
 npm test
 ```
 
-测试脚本会**从 `client.js` 里切片抽出真实的计价代码来执行**，而不是复制一份——避免"测的和跑的不是同一份"。覆盖：峰谷时段边界、节假日、三项拆解对账、饼图与角标同源、会话累计、悬停面板结构、金额格式化分档、币种判定、搜索费用声明的排除范围、中英字典对齐。
+The test script **slices the real pricing code out of `client.js` and runs it** rather than copying it — so "what is tested" and "what runs" cannot drift apart. Coverage: peak/off-peak boundaries, holidays, the three-way breakdown reconciliation, ring and badge reading the same numbers, session totals, panel structure, amount formatting tiers, currency detection, the search-fee exclusion notice, and zh/en dictionary parity.
 
-- 改价格表：`client.js` 顶部的 `PRICES`
-- 刷新节假日表：`node tools/fetch-holidays.mjs <年份>`（可再传国务院通知原文 URL 做交叉校验）
+- Change unit prices: `PRICES` at the top of `client.js`
+- Refresh the holiday table: `node tools/fetch-holidays.mjs <year>` (optionally pass the State Council notice URL for cross-checking)
 
-## 许可
+## License
 
 MIT
-
----
-
-**English** — A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plugin that adds one line under every reply showing what that exchange cost, priced from the turn's own token usage at the official peak/off-peak CNY rates, together with the account and bonus balances. Hover for a cost breakdown of the exchange versus the whole conversation. When a price cannot be computed it says why instead of guessing. The plugin makes no network calls of its own — the balance is read through the dsh host, which is also how dsh's own account page reads it; it stores nothing and never touches credentials. Requires dsh 0.2.0-rc.2 or newer (its turn-tail and account interfaces were checked on 0.2.1-rc.2); CNY accounts only.

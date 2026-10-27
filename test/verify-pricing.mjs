@@ -141,9 +141,9 @@ if (parts.some((part) => part === null)) {
   // 这里把依赖注入进去，跑的仍是同一份实现。
   const cacheLine = 'const aggregateCache = new WeakMap();';
   const chatBreakdown = new Function(
-    'breakdown', 'SLICES',
+    'breakdown', 'SLICES', 'state',
     `${cacheLine}\n${parts.join('\n')}\nreturn chatBreakdown;`,
-  )(breakdown, SLICES);
+  )(breakdown, SLICES, { currency: 'CNY' });
 
   /** 造一个 Turn 记录：轮次数据里带着 tokenUsage。 */
   const mkTurn = (number, usage, time) => ({
@@ -231,7 +231,7 @@ console.log('\n=== 多模型计价与「算不出来」的原因 ===');
   const offAt2 = Date.UTC(2026, 9, 11, 4, 0);
   const peakAt = Date.UTC(2026, 9, 8, 2, 0);   // 2026-10-08 周四 10:00 北京 = 高峰
 
-  const pro = PRICES['deepseek-v4-pro'];
+  const pro = PRICES.CNY['deepseek-v4-pro'];
   const expectPro = (band) => (u.cacheReadTokens * band.cacheHit
     + u.uncachedInputTokens * band.cacheMiss + u.outputTokens * band.output) / 1e6;
 
@@ -294,9 +294,12 @@ const panelSrc = [
   sliceConst(code, 'PANEL_WIDTH'),
   sliceConst(code, 'RING_SIZE'),
   sliceConst(code, 'SLICE_GAP'),
+  sliceConst(code, 'SYMBOLS'),
+  sliceConst(code, 'PER_REQUEST_FEE'),
   sliceFunction(code, 'eased'),
   sliceFunction(code, 'count'),
   sliceFunction(code, 'money'),
+  sliceFunction(code, 'amount'),
   sliceFunction(code, 'CostDetail'),
 ];
 if (panelSrc.some((piece) => piece === null || piece === void 0)) {
@@ -338,7 +341,7 @@ if (panelSrc.some((piece) => piece === null || piece === void 0)) {
     totalTokens: sessionParts.reduce((sum, part) => sum + part.tokens, 0),
   };
 
-  const tree = CostDetailFn({ detail: turnDetail, sessionBreakdown: sessionAgg, t: identify, left: 700, top: 400 });
+  const tree = CostDetailFn({ detail: turnDetail, sessionBreakdown: sessionAgg, t: identify, currency: 'CNY', left: 700, top: 400 });
 
   /** 收集一个节点下的所有文本。 */
   const textsOf = (node, out = []) => {
@@ -419,32 +422,99 @@ if (panelSrc.some((piece) => piece === null || piece === void 0)) {
 }
 
 // ---------------------------------------------------------------------------
-// 币种：价目表是人民币站点的那一张，别的币种账户拿它算出来的钱是错的，
-// 所以判定为非人民币时一个金额都不出（client.js 的 state.currencyUnsupported）。
-console.log('\n=== 币种判定：非人民币账户一律不出金额 ===');
+// 币种：两个币种是两套独立价目表，不是汇率折算。判定为不支持时一个金额都不出
+// （client.js 的 state.currency === null）；支持时按钱包币种选表、原币显示。
+console.log('\n=== 币种：按钱包选表，不做换算 ===');
 {
-  const cnyOnlySrc = sliceFunction(code, 'cnyOnly');
-  if (cnyOnlySrc === null) {
-    console.log('  ⚠ 抽不到 cnyOnly，跳过');
+  const detectSrc = sliceFunction(code, 'detectCurrency');
+  if (detectSrc === null) {
+    console.log('  ⚠ 抽不到 detectCurrency，跳过');
   } else {
-    const cnyOnlyFn = new Function(`${cnyOnlySrc}\nreturn cnyOnly;`)();
+    const detectCurrencyFn = new Function('PRICES', `${detectSrc}\nreturn detectCurrency;`)(PRICES);
+    const wrap = (wallets) => ({ value: wallets, bonusWallets: [] });
     const cases = [
-      ['空钱包表', [], true],
-      ['人民币钱包', [{ currency: 'CNY', balance: '6.2164' }], true],
-      ['未标注币种（旧数据）', [{ balance: '6.2164' }], true],
-      ['美元钱包', [{ currency: 'USD', balance: '5.00' }], false],
-      ['小写 usd', [{ currency: 'usd', balance: '5.00' }], false],
-      ['人民币与美元混装', [{ currency: 'CNY', balance: '1' }, { currency: 'USD', balance: '1' }], false],
-      ['表里有坏元素', [null, { currency: 'CNY', balance: '1' }], true],
+      ['空钱包表（旧数据）', wrap([]), 'CNY'],
+      ['人民币钱包', wrap([{ currency: 'CNY', balance: '6.2164' }]), 'CNY'],
+      ['未标注币种', wrap([{ balance: '6.2164' }]), 'CNY'],
+      ['美元钱包', wrap([{ currency: 'USD', balance: '5.00' }]), 'USD'],
+      ['小写 usd', wrap([{ currency: 'usd', balance: '5.00' }]), 'USD'],
+      ['人民币与美元混装', wrap([{ currency: 'CNY' }, { currency: 'USD' }]), null],
+      ['价目表里没有的币种', wrap([{ currency: 'EUR' }]), null],
+      ['坏元素被跳过', wrap([null, { currency: 'USD' }]), 'USD'],
+      ['充值与礼金都是 USD', { value: [{ currency: 'USD' }], bonusWallets: [{ currency: 'USD' }] }, 'USD'],
+      ['充值 USD、礼金 CNY', { value: [{ currency: 'USD' }], bonusWallets: [{ currency: 'CNY' }] }, null],
+      ['只有礼金钱包', { value: [], bonusWallets: [{ currency: 'USD' }] }, 'USD'],
+      ['两边都没有钱包', { value: [], bonusWallets: [] }, 'CNY'],
     ];
     let okCur = 0;
-    for (const [name, wallets, want] of cases) {
-      const got = cnyOnlyFn(wallets);
+    for (const [name, detail, want] of cases) {
+      const got = detectCurrencyFn(detail);
       const pass = got === want;
       if (pass) okCur += 1;
-      console.log(`  ${name.padEnd(20)} ${got ? '人民币' : '非人民币'}  期望${want ? '人民币' : '非人民币'}  ${pass ? '✓' : '✗'}`);
+      console.log(`  ${name.padEnd(20)} ${String(got).padEnd(4)} 期望 ${String(want).padEnd(4)} ${pass ? '✓' : '✗'}`);
     }
     console.log(`  ${okCur}/${cases.length} 通过`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 美元价目表：同一份用量在两种币种下各查各的表，而且两表之间**不是**固定汇率。
+console.log('\n=== 美元计价：独立价目表，不是汇率折算 ===');
+{
+  const usage = asFlash({ uncachedInputTokens: 5120, cacheReadTokens: 3120000, cacheWriteTokens: 0, outputTokens: 24576 });
+  const at = Date.UTC(2026, 9, 11, 4, 0);
+  const cny = breakdown(usage, at, 'CNY');
+  const usd = breakdown(usage, at, 'USD');
+  // flash 空闲：命中 0.02 / 未命中 1 / 输出 4（CNY），0.003 / 0.15 / 0.6（USD）
+  const wantCny = 3120000 / 1e6 * 0.02 + 5120 / 1e6 * 1 + 24576 / 1e6 * 4;
+  const wantUsd = 3120000 / 1e6 * 0.003 + 5120 / 1e6 * 0.15 + 24576 / 1e6 * 0.6;
+  const checks = [
+    ['人民币金额', cny !== null && Math.abs(cny.totalCost - wantCny) < 1e-12, `¥${cny === null ? 'null' : cny.totalCost.toFixed(6)}`],
+    ['美元金额', usd !== null && Math.abs(usd.totalCost - wantUsd) < 1e-12, `$${usd === null ? 'null' : usd.totalCost.toFixed(6)}`],
+    ['两表之比不是 1', cny !== null && usd !== null && Math.abs(cny.totalCost - usd.totalCost) > 1e-9, ''],
+    // pro 的隐含倍数（6.80）与 flash（6.67）不同 —— 一旦有人想加"汇率"就会踩这里。
+    ['pro 的隐含倍数与 flash 不同', (() => {
+      const u = { uncachedInputTokens: 0, cacheReadTokens: 1e6, cacheWriteTokens: 0, outputTokens: 0, reasoningTokens: 0 };
+      const mk = (model) => ({ ...u, routes: [{ model }] });
+      const rFlash = breakdown(mk('deepseek-flash'), at, 'CNY').totalCost / breakdown(mk('deepseek-flash'), at, 'USD').totalCost;
+      const rPro = breakdown(mk('deepseek-v4-pro'), at, 'CNY').totalCost / breakdown(mk('deepseek-v4-pro'), at, 'USD').totalCost;
+      return Math.abs(rFlash - rPro) > 1e-6;
+    })(), ''],
+  ];
+  let okUsd = 0;
+  for (const [name, pass, detail] of checks) {
+    if (pass) okUsd += 1;
+    console.log(`  ${name}${detail === '' ? '' : `  ${detail}`}  ${pass ? '✓' : '✗'}`);
+  }
+  console.log(`  ${okUsd}/${checks.length} 通过`);
+}
+
+// ---------------------------------------------------------------------------
+// 带符号的金额：符号跟着币种走，与界面语言无关。
+console.log('\n=== 金额符号 amount() ===');
+{
+  const symbolSrc = sliceConst(code, 'SYMBOLS');
+  const moneySrc = sliceFunction(code, 'money');
+  const amountSrc = sliceFunction(code, 'amount');
+  if (symbolSrc === null || moneySrc === null || amountSrc === null) {
+    console.log('  ⚠ 抽不到 SYMBOLS / money / amount，跳过');
+  } else {
+    const amountFn = new Function(`${symbolSrc}\n${moneySrc}\n${amountSrc}\nreturn amount;`)();
+    const cases = [
+      ['人民币小额', 0.0001234, 'CNY', '¥0.000123'],
+      ['美元小额', 0.0001234, 'USD', '$0.000123'],
+      ['人民币过一元', 1.5, 'CNY', '¥1.5000'],
+      ['美元过一元', 1.5, 'USD', '$1.5000'],
+      ['未知币种回退人民币符号', 2, 'EUR', '¥2.0000'],
+    ];
+    let okAmt = 0;
+    for (const [name, value, currency, want] of cases) {
+      const got = amountFn(value, currency);
+      const pass = got === want;
+      if (pass) okAmt += 1;
+      console.log(`  ${name.padEnd(22)} ${got.padEnd(12)} 期望 ${want.padEnd(12)} ${pass ? '✓' : '✗'}`);
+    }
+    console.log(`  ${okAmt}/${cases.length} 通过`);
   }
 }
 

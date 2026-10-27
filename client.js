@@ -60,23 +60,51 @@ window.__ModuleLoader__.load({
     // ------------------------------------------------------------------ 计价 --
 
     /**
-     * 官方单价，人民币元 / 百万 token，**按模型分开**。
-     * 高峰 = 北京时间周一至周五 09:00–12:00、14:00–18:00，价格是空闲的两倍。
-     * 来源：https://api-docs.deepseek.com/zh-cn/quick_start/pricing
+     * 官方单价，**按币种和模型分开**，单位是该币种的「元 / 百万 token」。
+     *
+     * 两个币种是**两套独立定价**，不是汇率折算：拿同一项相除，flash 得 6.67、
+     * v4-pro 得 6.80，倍数并不一致 —— 所以任何汇率换算都会算错，只能按钱包的
+     * 币种选表、原币显示。
+     *
+     * 高峰时段两个币种完全相同：北京时间周一至周五 09:00–12:00、14:00–18:00，
+     * 价格是空闲的两倍。
+     * 来源：https://api-docs.deepseek.com/zh-cn/quick_start/pricing （人民币）
+     *       https://api-docs.deepseek.com/quick_start/pricing （美元）
      *
      * 官方调价或推出新模型时改这里，然后跑 `test/verify-pricing.mjs` 确认没写坏。
      * 没有收录的模型不会瞎算 —— 角标会直接写出模型名告诉你该更新了。
      */
     const PRICES = {
-      'deepseek-flash': {
-        offPeak: { cacheHit: 0.02, cacheMiss: 1, output: 4 },
-        peak: { cacheHit: 0.04, cacheMiss: 2, output: 8 },
+      CNY: {
+        'deepseek-flash': {
+          offPeak: { cacheHit: 0.02, cacheMiss: 1, output: 4 },
+          peak: { cacheHit: 0.04, cacheMiss: 2, output: 8 },
+        },
+        'deepseek-v4-pro': {
+          offPeak: { cacheHit: 0.15, cacheMiss: 4.5, output: 13.5 },
+          peak: { cacheHit: 0.3, cacheMiss: 9, output: 27 },
+        },
       },
-      'deepseek-v4-pro': {
-        offPeak: { cacheHit: 0.15, cacheMiss: 4.5, output: 13.5 },
-        peak: { cacheHit: 0.3, cacheMiss: 9, output: 27 },
+      USD: {
+        'deepseek-flash': {
+          offPeak: { cacheHit: 0.003, cacheMiss: 0.15, output: 0.6 },
+          peak: { cacheHit: 0.006, cacheMiss: 0.3, output: 1.2 },
+        },
+        'deepseek-v4-pro': {
+          offPeak: { cacheHit: 0.022, cacheMiss: 0.66, output: 1.98 },
+          peak: { cacheHit: 0.044, cacheMiss: 1.32, output: 3.96 },
+        },
       },
     };
+
+    /** 支持的币种 → 显示符号。不在这张表里的币种一律不出金额。 */
+    const SYMBOLS = { CNY: '¥', USD: '$' };
+
+    /**
+     * 搜索 / 抓取的按次费，按币种取自官方（2026-11-01 00:00 北京时间起）：
+     * 每 1000 次成功请求 ¥5 / $0.75。
+     */
+    const PER_REQUEST_FEE = { CNY: '¥0.005', USD: '$0.00075' };
 
     /**
      * 旧模型名 → 现役模型名的映射，用于查价。
@@ -120,9 +148,11 @@ window.__ModuleLoader__.load({
       return { kind: 'mixed', models };
     }
 
-    /** 查模型单价表，顺带解析旧模型名。没收录返回 null。 */
-    function tableFor(model) {
-      return PRICES[MODEL_ALIASES[model] ?? model] ?? null;
+    /** 查模型单价表，顺带解析旧模型名。该币种没收录这个模型时返回 null。 */
+    function tableFor(model, currency) {
+      const table = PRICES[currency];
+      if (table === void 0) return null;
+      return table[MODEL_ALIASES[model] ?? model] ?? null;
     }
 
     /**
@@ -184,11 +214,11 @@ window.__ModuleLoader__.load({
      * @param atMs - 该轮计费时刻。
      * @returns `{ parts, totalCost, totalTokens, reasoning }`，或 null 表示算不出来。
      */
-    function breakdown(usage, atMs) {
+    function breakdown(usage, atMs, currency = 'CNY') {
       if (usage === null || usage === void 0) return null;
       // 模型必须唯一且已收录，否则不算 —— 宁可不出数字，也不拿别的模型的单价硬套。
       const route = routeOf(usage);
-      const table = route.kind === 'one' ? tableFor(route.model) : null;
+      const table = route.kind === 'one' ? tableFor(route.model, currency) : null;
       if (table === null) return null;
       const band = isPeak(atMs) ? table.peak : table.offPeak;
       // DeepSeek 没有单独的缓存写入价，写缓存的那部分按未命中输入计费。
@@ -227,8 +257,8 @@ window.__ModuleLoader__.load({
      * @param atMs - 该轮计费时刻。
      * @returns 人民币金额，或 null 表示这一轮算不出来。
      */
-    function priceTurn(usage, atMs) {
-      const detail = breakdown(usage, atMs);
+    function priceTurn(usage, atMs, currency = 'CNY') {
+      const detail = breakdown(usage, atMs, currency);
       return detail === null ? null : detail.totalCost;
     }
 
@@ -240,14 +270,14 @@ window.__ModuleLoader__.load({
      * @param usage - `turn-tail` 的 tokenUsage。
      * @returns `{ key, params }` 或 null（表示能算，或只是还没结束）。
      */
-    function unpriceable(usage) {
+    function unpriceable(usage, currency = 'CNY') {
       if (usage === null || usage === void 0) return null;
       const route = routeOf(usage);
       if (route.kind === 'mixed') {
         return { key: 'whyMixed', params: { models: route.models.join(' + ') } };
       }
       if (route.kind === 'none') return { key: 'whyNoRoute', params: void 0 };
-      if (tableFor(route.model) === null) {
+      if (tableFor(route.model, currency) === null) {
         return { key: 'whyUnknown', params: { model: route.model } };
       }
       return null;
@@ -306,7 +336,12 @@ window.__ModuleLoader__.load({
        * 计费与它不同，所以这种情况**一个金额都不显示**，只在最新一轮说明原因。
        * false 同时表示"正常"和"还没读到"。
        */
-      currencyUnsupported: false,
+      /**
+       * 这个账户的计价币种：'CNY' / 'USD'，读到混合币种或不支持的币种时为 null。
+       * null 表示"一个金额都不显示"，只在最新一轮说明原因。
+       * 初始值按人民币算 —— 读到真实钱包后会被覆盖。
+       */
+      currency: 'CNY',
       /**
        * 余额**数值上次变化**的时刻（毫秒），**不是**"上次查询的时刻"。
        *
@@ -354,18 +389,33 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 钱包是否全部以人民币计价。
-     * 没标注币种的按人民币算（兼容旧数据）；只要出现一个明确的非 CNY 就算不是。
-     * @param wallets - `value` 或 `bonusWallets`。
-     * @returns 全部为人民币时为 true。
+     * 这个账户用哪种币种计价。
+     *
+     * 规则：
+     * - 只看 `PRICES` 里有价目表的币种，其它币种一律不支持（返回 null）；
+     * - 充值钱包与礼金钱包混装不同币种 → 返回 null（无法用一个表算两种钱）；
+     * - 单个钱包没标币种时按人民币算（兼容旧数据）；
+     * - 两边都**没有任何钱包**（旧数据/空账户）→ 按人民币，不当作"币种未知"。
+     *
+     * 返回 null 时调用方"一个金额都不显示"：拿一种币种的单价去算另一种币种的钱，
+     * 误差不是几个百分点的问题，所以我们宁可什么都不显示。
+     * @param detail - `getBalance` 返回的 `value`。
+     * @returns 'CNY' / 'USD' / null。
      */
-    function cnyOnly(wallets) {
-      for (const wallet of wallets || []) {
-        if (wallet === null || typeof wallet !== 'object') continue;
-        const currency = wallet.currency;
-        if (typeof currency === 'string' && currency.toUpperCase() !== 'CNY') return false;
+    function detectCurrency(detail) {
+      if (detail === null || typeof detail !== 'object') return null;
+      const wallets = [...(detail.value || []), ...(detail.bonusWallets || [])]
+        .filter((wallet) => wallet !== null && typeof wallet === 'object');
+      if (wallets.length === 0) return 'CNY';
+      let seen = null;
+      for (const wallet of wallets) {
+        const raw = wallet.currency;
+        const currency = typeof raw === 'string' && raw.trim() !== '' ? raw.trim().toUpperCase() : 'CNY';
+        if (PRICES[currency] === void 0) return null;
+        if (seen !== null && seen !== currency) return null;
+        seen = currency;
       }
-      return true;
+      return seen;
     }
 
     function clientMetadata() {
@@ -392,15 +442,15 @@ window.__ModuleLoader__.load({
           state.problem = 'signed-out';
         } else if (result.value.status !== 'ready') {
           state.problem = 'failed';
-        } else if (!cnyOnly(result.value.value) || !cnyOnly(result.value.bonusWallets)) {
-          // 非人民币账户：一个金额都不显示（见 state.currencyUnsupported）。
+        } else if (detectCurrency(result.value) === null) {
+          // 混合币种或没有价目表的币种：一个金额都不显示（见 state.currency）。
           state.problem = null;
-          state.currencyUnsupported = true;
+          state.currency = null;
           state.balance = null;
           state.bonus = 0;
         } else {
           state.problem = null;
-          state.currencyUnsupported = false;
+          state.currency = detectCurrency(result.value);
           // value 是充值余额，bonusWallets 是礼金。两者分开列、互不重叠：
           // 「账户余额」只报充值余额，礼金另起一项，相加才是钱包总额。
           const balance = sumWallets(result.value.value);
@@ -452,11 +502,21 @@ window.__ModuleLoader__.load({
 
     // ------------------------------------------------------------------ 视图 --
 
-    /** 金额格式：小钱保留更多小数。 */
+    /** 金额格式：小钱保留更多小数。不带符号 —— 符号由 `amount()` 按币种加。 */
     function money(value) {
       if (value >= 1) return value.toFixed(4);
       if (value >= 0.01) return value.toFixed(5);
       return value.toFixed(6);
+    }
+
+    /**
+     * 带币种符号的金额。符号跟着**钱包币种**走，不跟界面语言走：
+     * 美元账户显示的 `$1.2345` 就是平台实际扣的美元金额，全程没有换算。
+     * @param value - 金额。
+     * @param currency - 'CNY' / 'USD'；未知时回退人民币符号（只在渲染兜底时发生）。
+     */
+    function amount(value, currency) {
+      return `${SYMBOLS[currency] ?? SYMBOLS.CNY}${money(value)}`;
     }
 
     /** 时刻：本地时钟的 HH:MM:SS。余额读数的新鲜度靠它说清楚。 */
@@ -555,15 +615,17 @@ window.__ModuleLoader__.load({
      */
     function chatBreakdown(snapshot) {
       if (snapshot === null || typeof snapshot !== 'object') return null;
+      // 缓存键必须带上币种：账户币种变了，同一份快照算出来的钱就不一样。
+      const currency = state.currency;
       const cached = aggregateCache.get(snapshot);
-      if (cached !== void 0) return cached;
-      const value = computeChatBreakdown(snapshot);
-      aggregateCache.set(snapshot, value);
+      if (cached !== void 0 && cached.currency === currency) return cached.value;
+      const value = computeChatBreakdown(snapshot, currency);
+      aggregateCache.set(snapshot, { currency, value });
       return value;
     }
 
     /** 真正做加总的那一步，只由 chatBreakdown 在缓存未命中时调用。 */
-    function computeChatBreakdown(snapshot) {
+    function computeChatBreakdown(snapshot, currency) {
       const turns = snapshot.timeline?.turns;
       if (turns === null || turns === void 0 || typeof turns.values !== 'function') return null;
       const totals = new Map();
@@ -573,7 +635,7 @@ window.__ModuleLoader__.load({
       for (const turn of turns.values()) {
         turnsSeen += 1;
         const tail = tailOf(turn);
-        const detail = breakdown(tail === null ? null : tail.tokenUsage, billedAt(tail));
+        const detail = breakdown(tail === null ? null : tail.tokenUsage, billedAt(tail), currency);
         if (detail === null) {
           // 有 token 用量却算不出价 —— 这才是真正需要提示的漏算。
           // 没有用量的轮次（历史未装载）不算漏，那是另一回事。
@@ -612,7 +674,7 @@ window.__ModuleLoader__.load({
      * @returns 定位好的面板。
      */
     function CostDetail(props) {
-      const { detail, sessionBreakdown, t, left, top } = props;
+      const { detail, sessionBreakdown, t, left, top, currency } = props;
       const animate = eased();
       // 先以初始态挂载，下一帧再切终态，CSS transition 才会真的跑起来。
       const [shown, setShown] = React.useState(false);
@@ -683,7 +745,7 @@ window.__ModuleLoader__.load({
                   color: 'var(--dsw-alias-label-tertiary, #8b8b8b)',
                   fontVariantNumeric: 'tabular-nums',
                 },
-              }, `${count(row.tokens)} tok · ¥${money(row.cost)}`) : null));
+              }, `${count(row.tokens)} tok · ${amount(row.cost, currency)}`) : null));
         });
       };
 
@@ -740,7 +802,7 @@ window.__ModuleLoader__.load({
         { parts: detail.parts, totalCost: detail.totalCost },
         true,
         t('detailTotal'),
-        `${count(detail.totalTokens)} tok · ¥${money(detail.totalCost)}`,
+        `${count(detail.totalTokens)} tok · ${amount(detail.totalCost, currency)}`,
       );
 
       const sessionColumn = sessionBreakdown === null ? null : column(
@@ -750,7 +812,7 @@ window.__ModuleLoader__.load({
         t('sessionTotal'),
         // 整场的 token 总量也列出来：和左列对称，而且它和金额的反差本身就有信息
         // —— 几千万 token 只花几块钱，说明量的大头是便宜的缓存命中。
-        `${count(sessionBreakdown.totalTokens)} tok · ¥${money(sessionBreakdown.totalCost)}`,
+        `${count(sessionBreakdown.totalTokens)} tok · ${amount(sessionBreakdown.totalCost, currency)}`,
         // 有轮次算不出价时明说，避免「整场累计」静默少算。
         sessionBreakdown.turnsUnpriced > 0
           ? t('unpriced', { count: sessionBreakdown.turnsUnpriced }) : null,
@@ -825,7 +887,7 @@ window.__ModuleLoader__.load({
           fontSize: 11,
           lineHeight: '15px',
         },
-      }, t('searchNote'))));
+      }, t('searchNote', { fee: PER_REQUEST_FEE[currency] ?? PER_REQUEST_FEE.CNY }))));
     }
 
     function CostBadge(props) {
@@ -853,10 +915,10 @@ window.__ModuleLoader__.load({
 
       const tail = tailOf(turn);
       const usage = tail === null ? null : tail.tokenUsage;
-      const detail = breakdown(usage, billedAt(tail));
+      const detail = breakdown(usage, billedAt(tail), state.currency);
       const cost = detail === null ? null : detail.totalCost;
       // 算不出来的原因。静默留空最难查，所以直接把原因写在角标上。
-      const why = cost === null ? unpriceable(usage) : null;
+      const why = cost === null ? unpriceable(usage, state.currency) : null;
       // 每条对话**各自**在自己最新的一轮上显示余额（见 state.latest 的注释）：
       // 余额是账号级数字，对所有对话都成立；而"最新"必须按会话判定，
       // 因为轮次编号每个会话各从 1 开始，用全局最大值会让别的对话把当前这条挤掉。
@@ -908,9 +970,9 @@ window.__ModuleLoader__.load({
         if (timer.current !== null) clearTimeout(timer.current);
       }, []);
 
-      // 非人民币账户：所有轮次都不出金额，只在每条对话最新一轮的位置说明原因。
-      // 用人民币价目表算出来的钱对别的币种账户来说是错的，宁可什么都不显示。
-      if (state.currencyUnsupported === true) {
+      // 混合币种，或价目表里没有的币种：所有轮次都不出金额，只在每条对话最新一轮说明原因。
+      // 拿一种币种的价目表去算另一种币种的钱是错的，宁可什么都不显示。
+      if (state.currency === null) {
         if (!showBalance) return null;
         return h('div', {
           ref: anchor,
@@ -939,10 +1001,10 @@ window.__ModuleLoader__.load({
             transition: eased() ? 'background-color 120ms' : 'none',
           },
         // 标签本身也做同一条回退：字典是旧版时照样把模型名标出来（原生标题栏会显示完整读数时间）。
-        }, lit(t, 'spentModel', { amount: money(cost), model })
+        }, lit(t, 'spentModel', { amount: amount(cost, state.currency), model })
           ?? (model === ''
-            ? (lit(t, 'spent', { amount: money(cost) }) ?? `This exchange ¥${money(cost)}`)
-            : `${lit(t, 'spent', { amount: money(cost) }) ?? 'This exchange'} · ${model}`)));
+            ? (lit(t, 'spent', { amount: amount(cost, state.currency) }) ?? `This exchange ${amount(cost, state.currency)}`)
+            : `${lit(t, 'spent', { amount: amount(cost, state.currency) }) ?? 'This exchange'} · ${model}`)));
       } else if (why !== null) {
         children.push(h('span', { style: { color: WARNING } }, t(why.key, why.params)));
       }
@@ -950,7 +1012,7 @@ window.__ModuleLoader__.load({
         // 余额可能为负（透支）：用警示色写出来，别让它看起来像正常数字。
         const owed = state.balance !== null && state.balance < 0;
         const text = state.problem === null
-          ? (state.balance === null ? t('loading') : t('balance', { amount: money(state.balance) }))
+          ? (state.balance === null ? t('loading') : t('balance', { amount: amount(state.balance, state.currency) }))
           : t('unavailable');
         // 读数时刻直接跟在余额后面，**只在数字真的变了时才更新**（见 poll()）。
         // 它是一条诚实的信息，不是一个结论：时刻不动 = 这个数字没变过。
@@ -974,12 +1036,12 @@ window.__ModuleLoader__.load({
         }, readAt === '' ? text : `${text} · ${readAt}`));
         // 有礼金才列这一项。两个数字互不重叠，相加才是钱包总额。
         if (state.problem === null && state.bonus > 0) {
-          children.push(h('span', { style: { opacity: 0.75 } }, t('bonus', { amount: money(state.bonus) })));
+          children.push(h('span', { style: { opacity: 0.75 } }, t('bonus', { amount: amount(state.bonus, state.currency) })));
         }
       }
 
       const panel = popup === null || detail === null ? null : h(CostDetail, {
-        detail, sessionBreakdown, t, left: popup.left, top: popup.top,
+        detail, sessionBreakdown, t, currency: state.currency, left: popup.left, top: popup.top,
       });
 
       return h('div', {
@@ -996,14 +1058,14 @@ window.__ModuleLoader__.load({
     // ------------------------------------------------------------------ 文案 --
 
     const zh = {
-      spent: '本次问答花费 ¥{amount}',
-      spentModel: '本次问答花费 ¥{amount} · {model}',
+      spent: '本次问答花费 {amount}',
+      spentModel: '本次问答花费 {amount} · {model}',
       readAt: '余额更新于 {time}，此后未变；最后一次查询 {queried}。受平台同步延迟影响，该金额可能非实时值',
-      balance: '账户余额 ¥{amount}',
-      bonus: '礼金余额 ¥{amount}',
+      balance: '账户余额 {amount}',
+      bonus: '礼金余额 {amount}',
       loading: '账户余额读取中…',
       unavailable: '余额不可用',
-      nonCny: '仅支持人民币账户',
+      nonCny: '仅支持人民币与美元账户',
       'slice.cacheRead': '缓存命中输入',
       'slice.cacheMiss': '未缓存输入',
       'slice.cacheWrite': '缓存写入',
@@ -1011,7 +1073,7 @@ window.__ModuleLoader__.load({
       detailTotal: '本次问答合计',
       detailScope: '费用构成 · 按计费金额占比（非 token 数量）',
       detailReasoning: '输出中含推理 {tokens} tok',
-      searchNote: '不含 web_search 服务端检索的 token（那是另一次模型请求），以及搜索/抓取 API 的按次费（各 ¥0.005/次，2026-11-01 起）。web_fetch 抓回的正文已计入。',
+      searchNote: '不含 web_search 服务端检索的 token（那是另一次模型请求），以及搜索/抓取 API 的按次费（各 {fee}/次，2026-11-01 起）。web_fetch 抓回的正文已计入。',
       sessionTotal: '整场累计',
       scopeTurn: '本次问答',
       scopeSession: '整场对话',
@@ -1022,14 +1084,14 @@ window.__ModuleLoader__.load({
       unpriced: '其中 {count} 轮未计价',
     };
     const en = {
-      spent: 'This exchange ¥{amount}',
-      spentModel: 'This exchange ¥{amount} · {model}',
+      spent: 'This exchange {amount}',
+      spentModel: 'This exchange {amount} · {model}',
       readAt: 'Balance last updated at {time} and unchanged since; last queried at {queried}. Platform sync delays may make this amount non-current',
-      balance: 'Account balance ¥{amount}',
-      bonus: 'Bonus balance ¥{amount}',
+      balance: 'Account balance {amount}',
+      bonus: 'Bonus balance {amount}',
       loading: 'reading balance…',
       unavailable: 'balance unavailable',
-      nonCny: 'CNY accounts only',
+      nonCny: 'CNY and USD accounts only',
       'slice.cacheRead': 'Cached input',
       'slice.cacheMiss': 'Uncached input',
       'slice.cacheWrite': 'Cache write',
@@ -1037,7 +1099,7 @@ window.__ModuleLoader__.load({
       detailTotal: 'Exchange total',
       detailScope: 'Cost breakdown · share of billed amount, not tokens',
       detailReasoning: 'output includes {tokens} tok reasoning',
-      searchNote: 'Excludes the tokens web_search spends server-side (a separate model request) and the per-request Search/Fetch API fee (¥0.005 each, from 2026-11-01). Text returned by web_fetch is included.',
+      searchNote: 'Excludes the tokens web_search spends server-side (a separate model request) and the per-request Search/Fetch API fee ({fee} each, from 2026-11-01). Text returned by web_fetch is included.',
       sessionTotal: 'Conversation total',
       scopeTurn: 'This exchange',
       scopeSession: 'Whole conversation',
