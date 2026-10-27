@@ -72,7 +72,7 @@ Known margins:
 
 - Requires **dsh 0.2.0-rc.2 or newer**: the plugin depends on the host's turn-tail data and account Remote. Those two interfaces were checked on **0.2.1-rc.2 and 0.2.1-rc.3**; if the badge disappears after a dsh upgrade, this is the first thing to suspect.
 - Web and desktop, Windows and macOS (a pure client plugin: it touches no filesystem and has no platform branches).
-- Non-CNY accounts show no amounts (see above).
+- Accounts in any currency other than CNY or USD show no amounts (see above).
 
 ## Development
 

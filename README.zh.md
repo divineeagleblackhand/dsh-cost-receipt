@@ -72,7 +72,7 @@ dsh plugin --profile desktop add https://github.com/divineeagleblackhand/dsh-cos
 
 - 需要 **dsh 0.2.0-rc.2 及以上**：插件依赖它内部的 turn-tail 数据与 account Remote。这两个接口已在 **0.2.1-rc.2 与 0.2.1-rc.3** 上核对仍然存在；dsh 升级后如果角标消失，第一个要怀疑的就是这里。
 - Web 版与桌面版均可，Windows 与 macOS 均可（纯客户端插件，不碰文件系统，也没有平台分支）。
-- 非人民币账户不显示金额（见上）。
+- 非人民币、非美元账户不显示金额（见上）。
 
 ## 开发
 
